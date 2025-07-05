@@ -1,0 +1,66 @@
+pipeline {
+    agent any
+
+    tools {
+        nodejs 'nodejs23'
+    }
+
+    environment {
+        SCANNER_HOME = tool 'sonar-scanner'
+    }
+
+    stages {
+        stage('Git Checkout') {
+            steps {
+                git branch: 'main', url: 'https://github.com/2345nandu/3-tire-jenkins-pipeline.git'
+            }
+        }
+
+        stage('Frontend Compilation') {
+            steps {
+                dir('client') {
+                    sh 'find . -name "*.js" -exec node --check {} +'
+                }
+            }
+        }
+
+        stage('Backend Compilation') {
+            steps {
+                dir('api') {
+                    sh 'find . -name "*.js" -exec node --check {} +'
+                }
+            }
+        }
+
+        stage('Gitleaks Scan - Client') {
+            steps {
+                sh 'gitleaks detect --source ./client --exit-code 1'
+            }
+        }
+
+        stage('Gitleaks Scan - API') {
+            steps {
+                sh 'gitleaks detect --source ./api --exit-code 1'
+            }
+        }
+
+        stage('Sonar Analysis') {
+            steps {
+                withSonarQubeEnv('sonar') {
+                    sh '''$SCANNER_HOME/bin/sonar-scanner \
+                        -Dsonar.projectName=NodeJs-project \
+                        -Dsonar.projectKey=NodeJs-project \
+                        -Dsonar.sources=.'''
+                }
+            }
+        }
+
+        stage('Quality Gate Scanner') {
+            steps {
+                timeout(time: 1, unit: 'HOURS') {
+                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token'
+                }
+            }
+        }
+    }
+}
